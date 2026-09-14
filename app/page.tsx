@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownToLine, Building2, Check, ChevronDown, Clipboard,
-  ExternalLink, FileText, Mail, Phone, Search, SlidersHorizontal, Users, X,
+  ArrowDownToLine, Building2, Check, ChevronDown, ChevronLeft, ChevronRight,
+  Clipboard, ExternalLink, FileText, Mail, Phone, Search, SlidersHorizontal,
+  Users, X,
 } from "lucide-react";
 
 type Lead = {
@@ -22,109 +23,101 @@ type Lead = {
   source: string;
 };
 
-const aliases: Record<Exclude<keyof Lead, "id">, string[]> = {
-  firstName: ["first name", "firstname", "first_name", "given name"],
-  lastName: ["last name", "lastname", "last_name", "surname", "family name"],
-  jobTitle: ["title", "job title", "job_title", "position", "occupation"],
-  company: ["company", "company name", "organization", "organisation"],
-  email: ["email", "email address", "work email", "professional email"],
-  emailStatus: ["email status", "email_status", "status", "verification status"],
-  phone: ["phone", "phone number", "mobile", "telephone", "company phone"],
-  website: ["website", "company website", "domain", "company domain"],
-  linkedinUrl: ["linkedin", "linkedin url", "linkedin_url", "linkedin profile"],
-  industry: ["industry", "company industry"],
-  location: ["location", "city", "country", "address", "company location"],
-  source: ["source"],
+type LeadResponse = {
+  leads: Lead[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
 };
 
-function parseCsv(text: string) {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let quoted = false;
+type MetaResponse = {
+  stats: { total: number; withEmail: number; companies: number };
+  industries: Array<{ industry: string; leadCount: number }>;
+};
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (char === '"' && quoted && text[i + 1] === '"') {
-      field += '"';
-      i++;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === "," && !quoted) {
-      row.push(field);
-      field = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && text[i + 1] === "\n") i++;
-      row.push(field);
-      if (row.some((cell) => cell.trim())) rows.push(row);
-      row = [];
-      field = "";
-    } else {
-      field += char;
-    }
-  }
-
-  row.push(field);
-  if (row.some((cell) => cell.trim())) rows.push(row);
-  return rows;
-}
-
-function mapCsv(text: string): Lead[] {
-  const rows = parseCsv(text);
-  if (rows.length < 2) return [];
-
-  const headers = rows[0].map((header) => header.trim().toLowerCase().replace(/\s+/g, " "));
-  const findIndex = (key: Exclude<keyof Lead, "id">) =>
-    headers.findIndex((header) => aliases[key].includes(header));
-  const value = (cells: string[], key: Exclude<keyof Lead, "id">) => {
-    const index = findIndex(key);
-    return index >= 0 ? (cells[index] ?? "").trim() : "";
-  };
-
-  return rows.slice(1).map((cells, index) => ({
-    id: index + 1,
-    firstName: value(cells, "firstName"),
-    lastName: value(cells, "lastName"),
-    jobTitle: value(cells, "jobTitle"),
-    company: value(cells, "company"),
-    email: value(cells, "email"),
-    emailStatus: value(cells, "emailStatus"),
-    phone: value(cells, "phone"),
-    website: value(cells, "website"),
-    linkedinUrl: value(cells, "linkedinUrl"),
-    industry: value(cells, "industry"),
-    location: value(cells, "location"),
-    source: value(cells, "source") || "Skrapp CSV",
-  })).filter((lead) =>
-    lead.email || lead.phone || lead.company || lead.firstName || lead.lastName
-  );
-}
-
-function escapeCsv(value: string) {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+function buildFilterParams(query: string, company: string, industry: string) {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("q", query.trim());
+  if (company.trim()) params.set("company", company.trim());
+  if (industry) params.set("industry", industry);
+  return params;
 }
 
 export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ total: 0, withEmail: 0, companies: 0 });
+  const [industries, setIndustries] = useState<MetaResponse["industries"]>([]);
+  const [loadedRequest, setLoadedRequest] = useState("");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [company, setCompany] = useState("All companies");
-  const [industry, setIndustry] = useState("All industries");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [company, setCompany] = useState("");
+  const [debouncedCompany, setDebouncedCompany] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+  const [resultCount, setResultCount] = useState(0);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [copied, setCopied] = useState("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    fetch("/leads.csv", { cache: "no-store" })
+    fetch("/api/leads/meta")
       .then((response) => {
-        if (!response.ok) throw new Error("The leads.csv file could not be loaded.");
-        return response.text();
+        if (!response.ok) throw new Error("Lead totals could not be loaded.");
+        return response.json() as Promise<MetaResponse>;
       })
-      .then((csv) => setLeads(mapCsv(csv)))
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        setStats(data.stats);
+        setIndustries(data.industries);
+      })
+      .catch((reason: Error) => setError(reason.message));
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedCompany(company), 300);
+    return () => clearTimeout(timer);
+  }, [company]);
+
+  const requestUrl = useMemo(() => {
+    const params = buildFilterParams(debouncedQuery, debouncedCompany, industry);
+    params.set("page", String(page));
+    params.set("pageSize", "50");
+    return `/api/leads?${params}`;
+  }, [debouncedQuery, debouncedCompany, industry, page]);
+  const loading = loadedRequest !== requestUrl;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(requestUrl, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("The lead directory could not be loaded.");
+        return response.json() as Promise<LeadResponse>;
+      })
+      .then((data) => {
+        setLeads(data.leads);
+        setResultCount(data.total);
+        setPage(data.page);
+        setPageCount(data.pageCount);
+        setError("");
+        setLoadedRequest(requestUrl);
+      })
+      .catch((reason: Error) => {
+        if (reason.name !== "AbortError") {
+          setError(reason.message);
+          setLoadedRequest(requestUrl);
+        }
+      });
+
+    return () => controller.abort();
+  }, [requestUrl]);
 
   useEffect(() => {
     if (!notice) return;
@@ -132,30 +125,11 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const companies = useMemo(
-    () => [...new Set(leads.map((lead) => lead.company).filter(Boolean))].sort(),
-    [leads]
+  const hasFilters = Boolean(query || company || industry);
+  const allVisibleSelected = useMemo(
+    () => leads.length > 0 && leads.every((lead) => selected.has(lead.id)),
+    [leads, selected],
   );
-  const industries = useMemo(
-    () => [...new Set(leads.map((lead) => lead.industry).filter(Boolean))].sort(),
-    [leads]
-  );
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return leads.filter((lead) => {
-      const searchable = [
-        lead.firstName, lead.lastName, lead.jobTitle, lead.company,
-        lead.email, lead.phone, lead.location, lead.industry,
-      ].join(" ").toLowerCase();
-      return (!needle || searchable.includes(needle))
-        && (company === "All companies" || lead.company === company)
-        && (industry === "All industries" || lead.industry === industry);
-    });
-  }, [leads, query, company, industry]);
-
-  const hasFilters = query || company !== "All companies" || industry !== "All industries";
-  const allVisibleSelected =
-    filtered.length > 0 && filtered.every((lead) => selected.has(lead.id));
 
   function copy(value: string, key: string) {
     navigator.clipboard.writeText(value);
@@ -175,7 +149,7 @@ export default function Home() {
   function toggleVisible() {
     setSelected((current) => {
       const next = new Set(current);
-      filtered.forEach((lead) => {
+      leads.forEach((lead) => {
         if (allVisibleSelected) next.delete(lead.id);
         else next.add(lead.id);
       });
@@ -184,28 +158,22 @@ export default function Home() {
   }
 
   function exportLeads() {
-    const chosen = selected.size
-      ? leads.filter((lead) => selected.has(lead.id))
-      : filtered;
-    const headers = [
-      "First Name", "Last Name", "Job Title", "Company", "Email",
-      "Email Status", "Phone", "Website", "LinkedIn", "Industry", "Location", "Source",
-    ];
-    const rows = chosen.map((lead) => [
-      lead.firstName, lead.lastName, lead.jobTitle, lead.company, lead.email,
-      lead.emailStatus, lead.phone, lead.website, lead.linkedinUrl,
-      lead.industry, lead.location, lead.source,
-    ]);
-    const csv = [headers, ...rows]
-      .map((row) => row.map(escapeCsv).join(","))
-      .join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const params = selected.size
+      ? new URLSearchParams({ ids: [...selected].join(",") })
+      : buildFilterParams(debouncedQuery, debouncedCompany, industry);
     const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.href = `/api/leads/export?${params}`;
     anchor.click();
-    URL.revokeObjectURL(url);
-    setNotice(`${chosen.length.toLocaleString()} leads exported`);
+    setNotice(selected.size
+      ? `Exporting ${selected.size.toLocaleString()} selected leads`
+      : `Exporting ${resultCount.toLocaleString()} matching leads`);
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setCompany("");
+    setIndustry("");
+    setPage(1);
   }
 
   return <main className="app-shell">
@@ -214,67 +182,64 @@ export default function Home() {
         <span className="brand-mark"><Users size={20}/></span>
         <div><strong>Lead Vault</strong><span>Contact workspace</span></div>
       </div>
-      <div className="csv-source"><FileText size={16}/> Synced from leads.csv</div>
+      <div className="csv-source"><FileText size={16}/> Indexed lead directory</div>
     </header>
 
     <section className="workspace">
       <div className="page-title">
         <div><p className="eyebrow">LEAD DIRECTORY</p><h1>Find the right contact, fast.</h1></div>
-        <button className="button export" onClick={exportLeads} disabled={!filtered.length}>
+        <button className="button export" onClick={exportLeads} disabled={!resultCount}>
           <ArrowDownToLine size={17}/>
           {selected.size ? `Export selected (${selected.size})` : "Export results"}
         </button>
       </div>
 
       <div className="stats">
-        <div><span>Total leads</span><strong>{leads.length.toLocaleString()}</strong></div>
-        <div><span>With email</span><strong>{leads.filter((lead) => lead.email).length.toLocaleString()}</strong></div>
-        <div><span>Companies</span><strong>{companies.length.toLocaleString()}</strong></div>
-        <div><span>Showing now</span><strong>{filtered.length.toLocaleString()}</strong></div>
+        <div><span>Total leads</span><strong>{stats.total.toLocaleString()}</strong></div>
+        <div><span>With email</span><strong>{stats.withEmail.toLocaleString()}</strong></div>
+        <div><span>Companies</span><strong>{stats.companies.toLocaleString()}</strong></div>
+        <div><span>Matching filters</span><strong>{resultCount.toLocaleString()}</strong></div>
       </div>
 
       <section className="lead-panel">
         <div className="toolbar">
           <label className="search">
             <Search size={18}/>
-            <input value={query} onChange={(event) => setQuery(event.target.value)}
+            <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }}
               placeholder="Search name, company, title, email…"/>
           </label>
-          <label className="select-wrap">
+          <label className="filter-input">
             <Building2 size={16}/>
-            <select value={company} onChange={(event) => setCompany(event.target.value)}>
-              <option>All companies</option>
-              {companies.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <ChevronDown size={15}/>
+            <input value={company} onChange={(event) => { setCompany(event.target.value); setPage(1); }}
+              placeholder="Company starts with…"/>
           </label>
           <label className="select-wrap">
             <SlidersHorizontal size={16}/>
-            <select value={industry} onChange={(event) => setIndustry(event.target.value)}>
-              <option>All industries</option>
-              {industries.map((item) => <option key={item}>{item}</option>)}
+            <select value={industry} onChange={(event) => { setIndustry(event.target.value); setPage(1); }}>
+              <option value="">All industries</option>
+              {industries.map((item) => <option key={item.industry} value={item.industry}>
+                {item.industry} ({item.leadCount.toLocaleString()})
+              </option>)}
             </select>
             <ChevronDown size={15}/>
           </label>
-          {hasFilters && <button className="clear" onClick={() => {
-            setQuery(""); setCompany("All companies"); setIndustry("All industries");
-          }}><X size={15}/> Clear</button>}
+          {hasFilters && <button className="clear" onClick={clearFilters}><X size={15}/> Clear</button>}
         </div>
 
         {error && <div className="error-box">{error}</div>}
-        <div className="table-wrap">
+        <div className="table-wrap" aria-busy={loading}>
           <table>
             <thead><tr>
               <th className="check-cell"><input type="checkbox" checked={allVisibleSelected}
-                onChange={toggleVisible} aria-label="Select all visible leads"/></th>
+                onChange={toggleVisible} aria-label="Select all leads on this page"/></th>
               <th>Contact</th><th>Company</th><th>Location</th>
               <th>Contact details</th><th>Actions</th>
             </tr></thead>
             <tbody>
               {loading
-                ? Array.from({ length: 5 }).map((_, index) =>
+                ? Array.from({ length: 8 }).map((_, index) =>
                     <tr key={index} className="skeleton-row"><td/><td><span/></td><td><span/></td><td><span/></td><td><span/></td><td/></tr>)
-                : filtered.map((lead) => {
+                : leads.map((lead) => {
                   const name = `${lead.firstName} ${lead.lastName}`.trim() || "Unnamed contact";
                   return <tr key={lead.id} className={selected.has(lead.id) ? "selected-row" : ""}>
                     <td className="check-cell"><input type="checkbox" checked={selected.has(lead.id)}
@@ -309,15 +274,24 @@ export default function Home() {
                 })}
             </tbody>
           </table>
-          {!loading && !filtered.length && <div className="empty-state">
+          {!loading && !leads.length && <div className="empty-state">
             <span><Search size={24}/></span>
-            <h3>{leads.length ? "No leads match these filters" : "No leads found in leads.csv"}</h3>
-            <p>{leads.length ? "Try a broader search or clear the filters." : "Replace public/leads.csv with your exported Skrapp file, then redeploy."}</p>
+            <h3>No leads match these filters</h3>
+            <p>Try a broader search or clear the filters.</p>
           </div>}
         </div>
         <footer className="panel-footer">
-          <span>{filtered.length.toLocaleString()} of {leads.length.toLocaleString()} leads</span>
-          {selected.size > 0 && <span className="selection-count">{selected.size} selected</span>}
+          <span>{resultCount.toLocaleString()} matching leads · 50 loaded at a time</span>
+          <div className="footer-actions">
+            {selected.size > 0 && <span className="selection-count">{selected.size} selected</span>}
+            <div className="pagination">
+              <button onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={loading || page <= 1} aria-label="Previous page"><ChevronLeft size={17}/></button>
+              <span>Page {page.toLocaleString()} of {pageCount.toLocaleString()}</span>
+              <button onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                disabled={loading || page >= pageCount} aria-label="Next page"><ChevronRight size={17}/></button>
+            </div>
+          </div>
         </footer>
       </section>
     </section>

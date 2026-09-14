@@ -3,3 +3,9 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  NODE_OPTIONS = "--no-warnings"
+
+[[headers]]
+  for = "/api/leads/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
