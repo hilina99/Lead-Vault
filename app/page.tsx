@@ -20,6 +20,8 @@ type Lead = {
   linkedinUrl: string;
   industry: string;
   location: string;
+  experience: string;
+  experienceBand: string;
   source: string;
 };
 
@@ -34,13 +36,15 @@ type LeadResponse = {
 type MetaResponse = {
   stats: { total: number; withEmail: number; companies: number };
   industries: Array<{ industry: string; leadCount: number }>;
+  experienceBands: Array<{ experienceBand: string; leadCount: number }>;
 };
 
-function buildFilterParams(query: string, company: string, industry: string) {
+function buildFilterParams(query: string, company: string, industry: string, experience: string) {
   const params = new URLSearchParams();
   if (query.trim()) params.set("q", query.trim());
   if (company.trim()) params.set("company", company.trim());
   if (industry) params.set("industry", industry);
+  if (experience) params.set("experience", experience);
   return params;
 }
 
@@ -48,6 +52,7 @@ export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stats, setStats] = useState({ total: 0, withEmail: 0, companies: 0 });
   const [industries, setIndustries] = useState<MetaResponse["industries"]>([]);
+  const [experienceBands, setExperienceBands] = useState<MetaResponse["experienceBands"]>([]);
   const [loadedRequest, setLoadedRequest] = useState("");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -55,6 +60,7 @@ export default function Home() {
   const [company, setCompany] = useState("");
   const [debouncedCompany, setDebouncedCompany] = useState("");
   const [industry, setIndustry] = useState("");
+  const [experience, setExperience] = useState("");
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [resultCount, setResultCount] = useState(0);
@@ -71,6 +77,7 @@ export default function Home() {
       .then((data) => {
         setStats(data.stats);
         setIndustries(data.industries);
+        setExperienceBands(data.experienceBands);
       })
       .catch((reason: Error) => setError(reason.message));
   }, []);
@@ -86,11 +93,11 @@ export default function Home() {
   }, [company]);
 
   const requestUrl = useMemo(() => {
-    const params = buildFilterParams(debouncedQuery, debouncedCompany, industry);
+    const params = buildFilterParams(debouncedQuery, debouncedCompany, industry, experience);
     params.set("page", String(page));
     params.set("pageSize", "50");
     return `/api/leads?${params}`;
-  }, [debouncedQuery, debouncedCompany, industry, page]);
+  }, [debouncedQuery, debouncedCompany, industry, experience, page]);
   const loading = loadedRequest !== requestUrl;
 
   useEffect(() => {
@@ -125,7 +132,7 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const hasFilters = Boolean(query || company || industry);
+  const hasFilters = Boolean(query || company || industry || experience);
   const allVisibleSelected = useMemo(
     () => leads.length > 0 && leads.every((lead) => selected.has(lead.id)),
     [leads, selected],
@@ -160,7 +167,7 @@ export default function Home() {
   function exportLeads() {
     const params = selected.size
       ? new URLSearchParams({ ids: [...selected].join(",") })
-      : buildFilterParams(debouncedQuery, debouncedCompany, industry);
+      : buildFilterParams(debouncedQuery, debouncedCompany, industry, experience);
     const anchor = document.createElement("a");
     anchor.href = `/api/leads/export?${params}`;
     anchor.click();
@@ -173,6 +180,7 @@ export default function Home() {
     setQuery("");
     setCompany("");
     setIndustry("");
+    setExperience("");
     setPage(1);
   }
 
@@ -223,6 +231,16 @@ export default function Home() {
             </select>
             <ChevronDown size={15}/>
           </label>
+          <label className="select-wrap experience-filter">
+            <select value={experience} onChange={(event) => { setExperience(event.target.value); setPage(1); }}
+              aria-label="Filter by years of experience">
+              <option value="">All experience</option>
+              {experienceBands.map((item) => <option key={item.experienceBand} value={item.experienceBand}>
+                {item.experienceBand === "Not listed" ? "Not listed" : `${item.experienceBand} years`} ({item.leadCount.toLocaleString()})
+              </option>)}
+            </select>
+            <ChevronDown size={15}/>
+          </label>
           {hasFilters && <button className="clear" onClick={clearFilters}><X size={15}/> Clear</button>}
         </div>
 
@@ -232,13 +250,13 @@ export default function Home() {
             <thead><tr>
               <th className="check-cell"><input type="checkbox" checked={allVisibleSelected}
                 onChange={toggleVisible} aria-label="Select all leads on this page"/></th>
-              <th>Contact</th><th>Company</th><th>Location</th>
+              <th>Contact</th><th>Company</th><th>Location</th><th>Experience</th>
               <th>Contact details</th><th>Actions</th>
             </tr></thead>
             <tbody>
               {loading
                 ? Array.from({ length: 8 }).map((_, index) =>
-                    <tr key={index} className="skeleton-row"><td/><td><span/></td><td><span/></td><td><span/></td><td><span/></td><td/></tr>)
+                    <tr key={index} className="skeleton-row"><td/><td><span/></td><td><span/></td><td><span/></td><td><span/></td><td><span/></td><td/></tr>)
                 : leads.map((lead) => {
                   const name = `${lead.firstName} ${lead.lastName}`.trim() || "Unnamed contact";
                   return <tr key={lead.id} className={selected.has(lead.id) ? "selected-row" : ""}>
@@ -250,6 +268,9 @@ export default function Home() {
                     </div></td>
                     <td><div className="stack"><strong>{lead.company || "—"}</strong><span>{lead.industry || "Industry not listed"}</span></div></td>
                     <td><span className="location">{lead.location || "—"}</span></td>
+                    <td><span className={`experience-badge ${lead.experienceBand === "Not listed" ? "unknown" : ""}`}>
+                      {lead.experience}
+                    </span></td>
                     <td><div className="contact-lines">
                       {lead.email
                         ? <button onClick={() => copy(lead.email, `email-${lead.id}`)}>

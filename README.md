@@ -44,6 +44,9 @@ No publish directory or separate `index.html` is required.
 
 - Only 50 leads are returned per page.
 - Search and filters run against a server-side index.
+- Years-of-experience ranges appear in the table and can be filtered. When the
+  CSV has no exact experience column, the app clearly marks ranges as estimates
+  derived from Skrapp's seniority level.
 - Typing is debounced to reduce repeated requests.
 - Large CSV exports stream on demand instead of being built in browser memory.
 - The generated database is ignored by Git and rebuilt whenever `data/leads.csv` changes.

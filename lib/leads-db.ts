@@ -18,6 +18,7 @@ export function createLeadQuery(searchParams: URLSearchParams) {
   const query = (searchParams.get("q") ?? "").trim().slice(0, 120);
   const company = (searchParams.get("company") ?? "").trim().slice(0, 120);
   const industry = (searchParams.get("industry") ?? "").trim().slice(0, 160);
+  const experience = (searchParams.get("experience") ?? "").trim().slice(0, 20);
   const conditions: string[] = [];
   const parameters: Array<string | number> = [];
 
@@ -39,6 +40,11 @@ export function createLeadQuery(searchParams: URLSearchParams) {
     parameters.push(industry);
   }
 
+  if (experience) {
+    conditions.push("leads.experience_band = ?");
+    parameters.push(experience);
+  }
+
   return {
     where: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "",
     parameters,
@@ -58,5 +64,7 @@ export const leadColumns = `
   linkedin_url AS linkedinUrl,
   industry,
   location,
+  experience,
+  experience_band AS experienceBand,
   source
 `;

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const csvHeaders = [
   "First Name", "Last Name", "Job Title", "Company", "Email", "Email Status",
-  "Phone", "Website", "LinkedIn", "Industry", "Location", "Source",
+  "Phone", "Website", "LinkedIn", "Industry", "Location", "Experience", "Source",
 ];
 
 type ExportLead = {
@@ -21,6 +21,7 @@ type ExportLead = {
   linkedinUrl: string;
   industry: string;
   location: string;
+  experience: string;
   source: string;
 };
 
@@ -70,7 +71,7 @@ export function GET(request: NextRequest) {
         chunk += [
           lead.firstName, lead.lastName, lead.jobTitle, lead.company, lead.email,
           lead.emailStatus, lead.phone, lead.website, lead.linkedinUrl,
-          lead.industry, lead.location, lead.source,
+          lead.industry, lead.location, lead.experience, lead.source,
         ].map((value) => escapeCsv(value ?? "")).join(",") + "\n";
       }
       controller.enqueue(encoder.encode(chunk));

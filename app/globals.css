@@ -41,9 +41,10 @@ h1 { margin:0; font-size:clamp(27px,3vw,40px); letter-spacing:-.045em; line-heig
 .filter-input input { min-width:0; width:180px; border:0; outline:0; color:var(--ink); font-size:14px; }
 .select-wrap { height:44px; display:flex; align-items:center; gap:7px; padding:0 10px; border:1px solid #cfd7e5; border-radius:10px; color:#6a758b; background:white; }
 .select-wrap select { min-width:145px; max-width:210px; appearance:none; border:0; outline:0; background:transparent; color:var(--ink); font-size:14px; font-weight:600; }
+.experience-filter select { min-width:155px; }
 .clear { border:0; background:transparent; color:#6b7589; display:flex; align-items:center; gap:5px; cursor:pointer; font-size:13px; font-weight:700; }
 .table-wrap { overflow:auto; min-height:330px; }
-table { width:100%; border-collapse:collapse; min-width:1080px; }
+table { width:100%; border-collapse:collapse; min-width:1200px; }
 th { padding:12px 14px; background:#f7f9fc; color:#68738a; text-align:left; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--line); }
 td { padding:14px; border-bottom:1px solid #e8ecf2; vertical-align:middle; font-size:14px; }
 tbody tr { transition:.15s ease; }
@@ -57,6 +58,8 @@ input[type="checkbox"] { width:16px; height:16px; accent-color:var(--blue); }
 .person strong,.stack strong { font-size:14px; color:#1d2944; }
 .person div span,.stack span { color:#778197; font-size:12px; max-width:210px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .location { color:#556179; max-width:180px; display:block; }
+.experience-badge { display:inline-flex; align-items:center; min-height:27px; padding:0 9px; white-space:nowrap; border-radius:999px; background:#eaf0ff; color:#234da7; font-size:12px; font-weight:800; }
+.experience-badge.unknown { background:#f1f3f6; color:#7a8497; }
 .contact-lines { display:flex; flex-direction:column; gap:5px; min-width:225px; }
 .contact-lines button { max-width:280px; padding:0; border:0; background:transparent; color:#3e4d68; display:flex; align-items:center; gap:7px; cursor:pointer; font-size:13px; }
 .contact-lines button span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
